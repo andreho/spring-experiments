@@ -1,0 +1,115 @@
+networks:
+  local:
+    name: local
+    driver: bridge
+
+x-logging:
+  &default-logging
+  driver: "json-file"
+  options:
+    max-size: "1m"
+    max-file: "1"
+    tag: "{{.Name}}"
+
+services:
+  mongo:
+    image: mongo:8.0.4
+    container_name: mongo
+    restart: on-failure:5
+    environment:
+      MONGO_INITDB_DATABASE: test
+      MONGO_INITDB_ROOT_USERNAME: test
+      MONGO_INITDB_ROOT_PASSWORD: test
+
+    volumes:
+      - ./configs/mongo/docker-entrypoint-initdb.d/:/docker-entrypoint-initdb.d/:ro
+    networks:
+      - local
+    ports:
+      - "27017:27017"
+
+  mongo-express:
+    image: mongo-express
+    container_name: mongo-express
+    restart: always
+    environment:
+      ME_CONFIG_BASICAUTH: false
+      ME_CONFIG_MONGODB_ADMINUSERNAME: test
+      ME_CONFIG_MONGODB_ADMINPASSWORD: test
+      ME_CONFIG_MONGODB_URL: mongodb://test:test@mongo:27017/
+    networks:
+      - local
+    ports:
+      - "8081:8081"
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: grafana
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_USERS_DEFAULT_THEME=dark
+    depends_on:
+      - tempo
+    volumes:
+      - ./configs/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/provisioning-datasources.yaml:ro
+    networks:
+      - local
+    ports:
+      - "3000:3000"
+    logging: *default-logging
+
+  promtail:
+    image:  grafana/promtail:2.9.7
+    container_name: promtail
+    command: -config.file=/etc/promtail/docker-config.yaml
+    depends_on:
+      - loki
+    volumes:
+      - ./configs/promtail/promtail.yaml:/etc/promtail/docker-config.yaml
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - local
+    logging: *default-logging
+
+  tempo:
+    image: grafana/tempo:2.3.1
+    container_name: tempo
+    command: ["-config.file=/etc/tempo-local.yaml"]
+    volumes:
+      - ./configs/tempo/tempo-local.yaml:/etc/tempo-local.yaml
+    networks:
+      - local
+    ports:
+      - "4318:4318"   # otlp http
+      - "4317:4317"   # otlp grpc
+      - "3200:3200"   # tempo http
+      - "9095:9095"   # tempo grpc
+      - "14268:14268" # jaeger ingest
+    #logging: *default-logging
+
+  loki:
+    image: grafana/loki:2.9.7
+    container_name: loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - local
+    ports:
+      - "3100:3100"
+    logging: *default-logging
+
+  prometheus:
+    image: prom/prometheus:v2.51.1
+    container_name: prometheus
+    command:
+      - --config.file=/etc/prometheus.yaml
+      - --web.enable-remote-write-receiver
+      - --enable-feature=exemplar-storage
+    volumes:
+      - ./configs/prometheus/prometheus.yaml:/etc/prometheus.yaml
+    networks:
+      - local
+    ports:
+      - "9090:9090"
+    logging: *default-logging
