@@ -10,25 +10,61 @@ spring:
       uri: mongodb://localhost:27017/test
 
 management:
+  server:
+    port: 8090
   health:
     defaults:
       enabled: true
     mongo:
       enabled: true
-  server:
-    port: 8090
+  logging:
+    export:
+      enabled: false
   endpoint:
     health:
       probes:
         enabled: true
         add-additional-paths: true
-  otlp:
-    tracing:
-      export:
-        enabled: false
-    logging:
-      export:
-        enabled: false
+    prometheus:
+      access: read_only
+  prometheus:
     metrics:
       export:
         enabled: false
+        step: 100ms
+        pushgateway:
+          enabled: false
+          push-rate: 100ms
+          base-url: http://localhost:9191
+          job: ${spring.application.name}
+
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces
+      export:
+        enabled: true
+
+    logging:
+      endpoint: http://localhost:4318/v1/logs
+      export:
+        enabled: true
+
+    metrics:
+      # https://docs.micrometer.io/micrometer/reference/implementations/otlp.html
+      export:
+        enabled: true
+        url: http://localhost:4318/v1/metrics
+
+  endpoints:
+    web:
+      exposure:
+        include:
+          - '*'
+
+otel:
+  sdk:
+    disabled: false
+  exporter:
+    otlp:
+      protocol: grpc
+      endpoint: http://localhost:4317

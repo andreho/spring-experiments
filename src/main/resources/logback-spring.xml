@@ -16,5 +16,6 @@
             <charset>${CONSOLE_LOG_CHARSET}</charset>
         </encoder>
     </appender>
+
     <logger name="org.springframework.web" level="DEBUG"/>
 </configuration>
